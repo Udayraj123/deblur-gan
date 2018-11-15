@@ -1,10 +1,11 @@
 import os
+import cv2
 import datetime
 import click
 import numpy as np
 import tqdm
 
-from deblurgan.utils import load_images, write_log
+from deblurgan.utils import load_images, write_log, high_freq
 from deblurgan.losses import wasserstein_loss, perceptual_loss
 from deblurgan.model import generator_model, discriminator_model, generator_containing_discriminator_multiple_outputs
 
@@ -25,7 +26,14 @@ def save_all_weights(d, g, epoch_number, current_loss):
 
 def train_multiple_outputs(n_images, batch_size, log_dir, epoch_num, critic_updates=5):
     data = load_images('./images/train', n_images)
-    y_train, x_train = data['B'], data['A']
+    y_train = data['B']
+    # x_train = data['A']
+    x_train = np.array([])
+    x_train_b = np.array([])
+    for i in data['A']:
+        f = high_freq(cv2.cvtColor(i.astype(np.float32), cv2.COLOR_BGR2GRAY))
+        np.append(x_train,f[0])
+        np.append(x_train_b,f[1])
 
     g = generator_model()
     d = discriminator_model()
@@ -55,9 +63,10 @@ def train_multiple_outputs(n_images, batch_size, log_dir, epoch_num, critic_upda
         for index in range(int(x_train.shape[0] / batch_size)):
             batch_indexes = permutated_indexes[index*batch_size:(index+1)*batch_size]
             image_blur_batch = x_train[batch_indexes]
+            image_blur_batch_base = x_train_b[batch_indexes]
             image_full_batch = y_train[batch_indexes]
 
-            generated_images = g.predict(x=image_blur_batch, batch_size=batch_size)
+            generated_images = g.predict(x=[image_blur_batch, image_blur_batch_base], batch_size=batch_size)
 
             for _ in range(critic_updates):
                 d_loss_real = d.train_on_batch(image_full_batch, output_true_batch)
@@ -67,7 +76,7 @@ def train_multiple_outputs(n_images, batch_size, log_dir, epoch_num, critic_upda
 
             d.trainable = False
 
-            d_on_g_loss = d_on_g.train_on_batch(image_blur_batch, [image_full_batch, output_true_batch])
+            d_on_g_loss = d_on_g.train_on_batch([image_blur_batch, image_blur_batch_base], [image_full_batch, output_true_batch])
             d_on_g_losses.append(d_on_g_loss)
 
             d.trainable = True

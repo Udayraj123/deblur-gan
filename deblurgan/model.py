@@ -4,13 +4,13 @@ from keras.layers.convolutional import Conv2D
 from keras.layers.core import Dense, Flatten, Lambda
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model
-
 from .layer_utils import ReflectionPadding2D, res_block
 
 # the paper defined hyper-parameter:chr
 channel_rate = 64
 # Note the image_shape must be multiple of patch_shape
 image_shape = (256, 256, 3)
+image_shape1 = (256, 256, 1)
 patch_shape = (channel_rate, channel_rate, 3)
 
 ngf = 64
@@ -26,6 +26,7 @@ def generator_model():
     """Build generator architecture."""
     # Current version : ResNet block
     inputs = Input(shape=image_shape)
+    base = Input(shape=image_shape)
 
     x = ReflectionPadding2D((3, 3))(inputs)
     x = Conv2D(filters=ngf, kernel_size=(7, 7), padding='valid')(x)
@@ -58,8 +59,11 @@ def generator_model():
     outputs = Add()([x, inputs])
     # outputs = Lambda(lambda z: K.clip(z, -1, 1))(x)
     outputs = Lambda(lambda z: z/2)(outputs)
+    
+    # Adding base layer at end
+    outputs = Add()([outputs, base])
 
-    model = Model(inputs=inputs, outputs=outputs, name='Generator')
+    model = Model(inputs=[inputs, base], outputs=outputs, name='Generator')
     return model
 
 
@@ -96,7 +100,8 @@ def discriminator_model():
 
 
 def generator_containing_discriminator(generator, discriminator):
-    inputs = Input(shape=image_shape)
+    # inputs = Input(shape=image_shape)
+    inputs = [Input(shape=image_shape), Input(shape=image_shape)]
     generated_image = generator(inputs)
     outputs = discriminator(generated_image)
     model = Model(inputs=inputs, outputs=outputs)
@@ -104,7 +109,8 @@ def generator_containing_discriminator(generator, discriminator):
 
 
 def generator_containing_discriminator_multiple_outputs(generator, discriminator):
-    inputs = Input(shape=image_shape)
+    # inputs = Input(shape=image_shape)
+    inputs = [Input(shape=image_shape), Input(shape=image_shape)]
     generated_image = generator(inputs)
     outputs = discriminator(generated_image)
     model = Model(inputs=inputs, outputs=[generated_image, outputs])
